@@ -332,6 +332,7 @@ pub struct Keybinds {
     pub split_vertical: ActionKeybinds,
     pub split_horizontal: ActionKeybinds,
     pub close_pane: ActionKeybinds,
+    pub clear_pane: ActionKeybinds,
     pub zoom: ActionKeybinds,
     pub resize_mode: ActionKeybinds,
     pub toggle_sidebar: ActionKeybinds,
@@ -494,6 +495,7 @@ impl Config {
             split_vertical: empty_action!(),
             split_horizontal: empty_action!(),
             close_pane: empty_action!(),
+            clear_pane: empty_action!(),
             zoom: empty_action!(),
             resize_mode: empty_action!(),
             toggle_sidebar: empty_action!(),
@@ -635,6 +637,7 @@ impl Config {
             apply_action!(keybinds.split_vertical, split_vertical, source);
             apply_action!(keybinds.split_horizontal, split_horizontal, source);
             apply_action!(keybinds.close_pane, close_pane, source);
+            apply_action!(keybinds.clear_pane, clear_pane, source);
             apply_action!(keybinds.zoom, zoom, source);
             apply_action!(keybinds.resize_mode, resize_mode, source);
             apply_action!(keybinds.toggle_sidebar, toggle_sidebar, source);
@@ -1539,6 +1542,31 @@ next_tab = "prefix+n"
     fn back_and_forth_keybinds_are_unset_by_default() {
         let kb = Config::default().keybinds();
         assert!(kb.last_pane.bindings.is_empty());
+    }
+
+    #[test]
+    fn clear_pane_keybind_is_unset_by_default() {
+        let kb = Config::default().keybinds();
+        assert!(kb.clear_pane.bindings.is_empty());
+    }
+
+    #[test]
+    fn clear_pane_keybind_accepts_user_prefix_binding() {
+        let config: Config = toml::from_str(
+            r#"
+[keys]
+clear_pane = "prefix+shift+c"
+"#,
+        )
+        .unwrap();
+        let kb = config.keybinds();
+        assert_eq!(
+            binding_triggers(&kb.clear_pane),
+            vec![BindingTrigger::Prefix((
+                KeyCode::Char('c'),
+                KeyModifiers::SHIFT
+            ))]
+        );
     }
 
     #[test]

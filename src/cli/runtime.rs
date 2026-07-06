@@ -120,3 +120,7 @@ pub(super) fn pane_move(params: PaneMoveParams) -> std::io::Result<i32> {
 pub(super) fn pane_close(pane_id: String) -> std::io::Result<i32> {
     print_method_response("cli:pane:close", Method::PaneClose(PaneTarget { pane_id }))
 }
+
+pub(super) fn pane_clear(pane_id: String) -> std::io::Result<i32> {
+    print_method_response("cli:pane:clear", Method::PaneClear(PaneTarget { pane_id }))
+}

@@ -433,6 +433,11 @@ fn pane_command() -> Command {
                 .arg(flag("focus"))
                 .arg(flag("no-focus")),
         )
+        .subcommand(id_command(
+            "clear",
+            "pane_id",
+            "Clear a pane's screen and scrollback, keeping the current input line",
+        ))
         .subcommand(id_command("close", "pane_id", "Close a pane"))
         .subcommand(
             Command::new("send-text")

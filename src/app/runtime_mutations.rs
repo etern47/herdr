@@ -101,6 +101,10 @@ impl App {
         self.dispatch_runtime_mutation(id, Method::PaneClose(PaneTarget { pane_id }))
     }
 
+    pub(crate) fn runtime_pane_clear(&mut self, id: &'static str, pane_id: String) -> String {
+        self.dispatch_runtime_mutation(id, Method::PaneClear(PaneTarget { pane_id }))
+    }
+
     pub(crate) fn runtime_pane_rename(
         &mut self,
         id: &'static str,

@@ -988,6 +988,7 @@ impl App {
             Method::PaneSendInput(params) => {
                 return self.handle_pane_send_input(request.id, params)
             }
+            Method::PaneClear(target) => return self.handle_pane_clear(request.id, target),
             Method::PaneClose(target) => return self.handle_pane_close(request.id, target),
             Method::PaneSendKeys(params) => return self.handle_pane_send_keys(request.id, params),
             Method::IntegrationInstall(params) => {

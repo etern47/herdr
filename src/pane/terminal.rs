@@ -192,6 +192,10 @@ impl PaneTerminal {
         self.ghostty.set_scroll_offset_from_bottom(lines);
     }
 
+    pub fn clear_screen_and_history(&self) -> bool {
+        self.ghostty.clear_screen_and_history()
+    }
+
     pub fn scroll_metrics(&self) -> Option<ScrollMetrics> {
         self.ghostty.scroll_metrics()
     }
@@ -896,6 +900,73 @@ impl GhosttyPaneTerminal {
                 core.terminal.scroll_viewport_delta(-(lines as isize));
             }
         }
+    }
+
+    /// Clear the pane like a native terminal Cmd+K: erase the scrollback and
+    /// all screen contents except the logical line the cursor is on, which
+    /// moves to the top of the screen with the cursor keeping its column.
+    ///
+    /// The clear is synthesized as VT sequences fed straight into the parser,
+    /// so nothing is written to the PTY and the child process is untouched.
+    /// The alternate screen has no scrollback and is owned by a full-screen
+    /// app, so the clear is skipped there. Returns whether a clear happened.
+    pub fn clear_screen_and_history(&self) -> bool {
+        let Ok(mut core) = self.core.lock() else {
+            return false;
+        };
+        if core.terminal.active_screen().ok() != Some(crate::ghostty::ActiveScreen::Primary) {
+            return false;
+        }
+        let Ok((cursor_col, cursor_row)) = core.terminal.cursor_position() else {
+            return false;
+        };
+        let Ok(rows) = core.terminal.rows() else {
+            return false;
+        };
+
+        // Keep the cursor's whole logical line: extend across soft-wrapped
+        // continuation rows above and below the cursor row.
+        let mut keep_top = cursor_row;
+        while keep_top > 0
+            && core
+                .terminal
+                .active_row_is_wrap_continuation(keep_top)
+                .unwrap_or(false)
+        {
+            keep_top -= 1;
+        }
+        let mut keep_bottom = cursor_row;
+        while keep_bottom + 1 < rows
+            && core
+                .terminal
+                .active_row_is_wrap_continuation(keep_bottom + 1)
+                .unwrap_or(false)
+        {
+            keep_bottom += 1;
+        }
+
+        let mut seq = String::new();
+        // Erase the rows below the kept line without disturbing it.
+        if keep_bottom + 1 < rows {
+            seq.push_str(&format!("\x1b[{};1H\x1b[J", keep_bottom + 2));
+        }
+        // Scroll the kept line to the top of the screen.
+        if keep_top > 0 {
+            seq.push_str(&format!("\x1b[{keep_top}S"));
+        }
+        // Put the cursor back on its column within the moved line.
+        seq.push_str(&format!(
+            "\x1b[{};{}H",
+            cursor_row - keep_top + 1,
+            cursor_col + 1
+        ));
+        // Erase the scrollback last so rows scrolled off above are dropped.
+        seq.push_str("\x1b[3J");
+        core.terminal.write(seq.as_bytes());
+        core.terminal.scroll_viewport_bottom();
+        #[cfg(windows)]
+        windows_recent_fallback::update(&mut core);
+        true
     }
 
     pub fn scroll_metrics(&self) -> Option<ScrollMetrics> {
@@ -3353,6 +3424,78 @@ mod tests {
             .extract_selection(&selection)
             .expect("selection should extract text");
         assert_eq!(text, "000003\n000004\n000005");
+    }
+
+    #[test]
+    fn clear_screen_and_history_keeps_prompt_line_at_top() {
+        let (tx, _rx) = mpsc::channel(4);
+        let mut terminal = crate::ghostty::Terminal::new(20, 5, 10_000).unwrap();
+        write_numbered_lines(&mut terminal, 8);
+        terminal.write(b"$ hello");
+        let pane = GhosttyPaneTerminal::new(terminal, tx).unwrap();
+
+        let before = pane.scroll_metrics().expect("scroll metrics before clear");
+        assert!(before.max_offset_from_bottom > 0);
+
+        assert!(pane.clear_screen_and_history());
+
+        assert_eq!(pane.visible_text(), "$ hello\n");
+        let metrics = pane.scroll_metrics().expect("scroll metrics after clear");
+        assert_eq!(metrics.offset_from_bottom, 0);
+        assert_eq!(metrics.max_offset_from_bottom, 0);
+        {
+            let core = pane.core.lock().unwrap();
+            assert_eq!(core.terminal.cursor_position().unwrap(), (7, 0));
+        }
+        assert!(pane.pending_pty_responses.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn clear_screen_and_history_keeps_whole_soft_wrapped_input_line() {
+        let (tx, _rx) = mpsc::channel(4);
+        let mut terminal = crate::ghostty::Terminal::new(5, 4, 10_000).unwrap();
+        terminal.write(b"out1\r\nout2\r\nout3\r\n$ ABCDEFG");
+        let pane = GhosttyPaneTerminal::new(terminal, tx).unwrap();
+
+        assert!(pane.clear_screen_and_history());
+
+        assert_eq!(pane.visible_text(), "$ ABC\nDEFG\n");
+        let metrics = pane.scroll_metrics().expect("scroll metrics after clear");
+        assert_eq!(metrics.max_offset_from_bottom, 0);
+        let core = pane.core.lock().unwrap();
+        assert_eq!(core.terminal.cursor_position().unwrap(), (4, 1));
+    }
+
+    #[test]
+    fn clear_screen_and_history_erases_rows_below_cursor_line() {
+        let (tx, _rx) = mpsc::channel(4);
+        let mut terminal = crate::ghostty::Terminal::new(20, 5, 10_000).unwrap();
+        terminal.write(b"one\r\ntwo\r\nthree\r\nfour");
+        terminal.write(b"\x1b[2;3H");
+        let pane = GhosttyPaneTerminal::new(terminal, tx).unwrap();
+
+        assert!(pane.clear_screen_and_history());
+
+        assert_eq!(pane.visible_text(), "two\n");
+        let core = pane.core.lock().unwrap();
+        assert_eq!(core.terminal.cursor_position().unwrap(), (2, 0));
+    }
+
+    #[test]
+    fn clear_screen_and_history_is_noop_on_alternate_screen() {
+        let (tx, _rx) = mpsc::channel(4);
+        let mut terminal = crate::ghostty::Terminal::new(20, 5, 10_000).unwrap();
+        terminal.write(b"primary\r\n\x1b[?1049h\x1b[Halt-screen");
+        let pane = GhosttyPaneTerminal::new(terminal, tx).unwrap();
+
+        assert!(!pane.clear_screen_and_history());
+
+        assert!(pane.visible_text().contains("alt-screen"));
+        let core = pane.core.lock().unwrap();
+        assert_eq!(
+            core.terminal.active_screen().unwrap(),
+            crate::ghostty::ActiveScreen::Alternate
+        );
     }
 
     #[test]

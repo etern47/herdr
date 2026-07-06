@@ -2379,6 +2379,13 @@ impl PaneRuntime {
         self.terminal.set_scroll_offset_from_bottom(lines);
     }
 
+    /// Clear the visible screen and scrollback, keeping the cursor's current
+    /// line and moving it to the top. Nothing is written to the PTY. Returns
+    /// whether a clear happened (the alternate screen is left untouched).
+    pub fn clear_screen_and_history(&self) -> bool {
+        self.terminal.clear_screen_and_history()
+    }
+
     pub fn scroll_metrics(&self) -> Option<ScrollMetrics> {
         self.terminal.scroll_metrics()
     }

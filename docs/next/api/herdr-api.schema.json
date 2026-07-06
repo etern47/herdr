@@ -4691,6 +4691,22 @@
         {
           "properties": {
             "method": {
+              "const": "pane.clear",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/PaneTarget"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
               "const": "pane.close",
               "type": "string"
             },
@@ -7861,6 +7877,22 @@
               "required": [
                 "type",
                 "zoom"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "cleared": {
+                  "type": "boolean"
+                },
+                "type": {
+                  "const": "pane_clear",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "cleared"
               ],
               "type": "object"
             },

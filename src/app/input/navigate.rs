@@ -300,6 +300,10 @@ impl App {
                     leave_navigate_mode(&mut self.state);
                 }
             }
+            NavigateAction::ClearPane => {
+                self.clear_focused_pane_via_api();
+                leave_navigate_mode(&mut self.state);
+            }
             NavigateAction::EditScrollback => {}
             NavigateAction::CopyMode => self.state.enter_copy_mode(&self.terminal_runtimes),
             NavigateAction::Zoom => {
@@ -500,6 +504,16 @@ impl App {
         };
         self.runtime_pane_close("tui.pane.close", pane_id);
         self.state.mode == Mode::ConfirmClose
+    }
+
+    pub(crate) fn clear_focused_pane_via_api(&mut self) {
+        let Some((ws_idx, pane_id)) = self.focused_pane_target() else {
+            return;
+        };
+        let Some(pane_id) = self.public_pane_id(ws_idx, pane_id) else {
+            return;
+        };
+        self.runtime_pane_clear("tui.pane.clear", pane_id);
     }
 
     pub(crate) fn zoom_focused_pane_via_api(&mut self) {
@@ -1233,6 +1247,7 @@ pub(crate) enum NavigateAction {
     SplitVertical,
     SplitHorizontal,
     ClosePane,
+    ClearPane,
     EditScrollback,
     CopyMode,
     Zoom,
@@ -1342,6 +1357,7 @@ fn action_for_key(
         (&kb.split_vertical, NavigateAction::SplitVertical),
         (&kb.split_horizontal, NavigateAction::SplitHorizontal),
         (&kb.close_pane, NavigateAction::ClosePane),
+        (&kb.clear_pane, NavigateAction::ClearPane),
         (&kb.zoom, NavigateAction::Zoom),
         (&kb.resize_mode, NavigateAction::EnterResizeMode),
         (&kb.toggle_sidebar, NavigateAction::ToggleSidebar),
@@ -1542,6 +1558,15 @@ pub(super) fn execute_navigate_action_in_context(
             if !state.close_pane() {
                 leave_navigate_mode(state);
             }
+        }
+        NavigateAction::ClearPane => {
+            if let Some(runtime) = state.active.and_then(|ws_idx| {
+                let pane_id = state.workspaces.get(ws_idx)?.focused_pane_id()?;
+                state.runtime_for_pane_in_workspace(terminal_runtimes, ws_idx, pane_id)
+            }) {
+                runtime.clear_screen_and_history();
+            }
+            leave_navigate_mode(state);
         }
         NavigateAction::EditScrollback => {}
         NavigateAction::CopyMode => state.enter_copy_mode(terminal_runtimes),
@@ -2301,6 +2326,27 @@ last_pane = "prefix+tab"
         );
 
         assert_eq!(pane_action, Some(NavigateAction::LastPane));
+    }
+
+    #[test]
+    fn prefix_clear_pane_binding_maps_to_clear_pane_action() {
+        let config: Config = toml::from_str(
+            r#"
+[keys]
+clear_pane = "prefix+shift+c"
+"#,
+        )
+        .unwrap();
+        let mut state = state_with_workspaces(&["test"]);
+        state.keybinds = config.keybinds();
+
+        let pane_action = action_for_key(
+            &state,
+            TerminalKey::new(KeyCode::Char('c'), KeyModifiers::SHIFT),
+            BindingDispatch::Prefix,
+        );
+
+        assert_eq!(pane_action, Some(NavigateAction::ClearPane));
     }
 
     #[test]

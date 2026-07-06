@@ -122,6 +122,9 @@ pub enum ResponseResult {
     PaneZoom {
         zoom: PaneZoomResult,
     },
+    PaneClear {
+        cleared: bool,
+    },
     PaneLayout {
         layout: PaneLayoutSnapshot,
     },

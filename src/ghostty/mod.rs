@@ -1025,6 +1025,35 @@ impl Terminal {
         self.get_u16(ffi::GhosttyTerminalData_GHOSTTY_TERMINAL_DATA_ROWS)
     }
 
+    /// Cursor position in the active area as 0-indexed (column, row).
+    pub fn cursor_position(&self) -> Result<(u16, u16), Error> {
+        let x = self.get_u16(ffi::GhosttyTerminalData_GHOSTTY_TERMINAL_DATA_CURSOR_X)?;
+        let y = self.get_u16(ffi::GhosttyTerminalData_GHOSTTY_TERMINAL_DATA_CURSOR_Y)?;
+        Ok((x, y))
+    }
+
+    /// Whether the active-area row at `y` is a continuation of a soft-wrapped
+    /// row above it.
+    pub fn active_row_is_wrap_continuation(&self, y: u16) -> Result<bool, Error> {
+        let grid_ref = self.grid_ref(ghostty_active_point(0, u32::from(y)))?;
+        let mut row: ffi::GhosttyRow = 0;
+        // SAFETY: grid_ref is valid and row matches the output type.
+        unsafe {
+            ffi::ghostty_grid_ref_row(&grid_ref, &mut row).into_result()?;
+        }
+        let mut wrap_continuation = false;
+        // SAFETY: wrap continuation output matches the requested row data type.
+        unsafe {
+            ffi::ghostty_row_get(
+                row,
+                ffi::GhosttyRowData_GHOSTTY_ROW_DATA_WRAP_CONTINUATION,
+                (&mut wrap_continuation as *mut bool).cast(),
+            )
+            .into_result()?;
+        }
+        Ok(wrap_continuation)
+    }
+
     pub fn effective_foreground_color(&self) -> Result<Option<RgbColor>, Error> {
         self.get_optional_rgb_color(TERMINAL_DATA_COLOR_FOREGROUND)
     }
@@ -1473,6 +1502,15 @@ impl Drop for Terminal {
         unsafe {
             ffi::ghostty_terminal_free(self.raw);
         }
+    }
+}
+
+fn ghostty_active_point(x: u16, y: u32) -> ffi::GhosttyPoint {
+    ffi::GhosttyPoint {
+        tag: ffi::GhosttyPointTag_GHOSTTY_POINT_TAG_ACTIVE,
+        value: ffi::GhosttyPointValue {
+            coordinate: ffi::GhosttyPointCoordinate { x, y },
+        },
     }
 }
 

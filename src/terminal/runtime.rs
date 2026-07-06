@@ -247,6 +247,10 @@ impl TerminalRuntime {
         self.0.set_scroll_offset_from_bottom(lines);
     }
 
+    pub fn clear_screen_and_history(&self) -> bool {
+        self.0.clear_screen_and_history()
+    }
+
     pub fn scroll_metrics(&self) -> Option<crate::pane::ScrollMetrics> {
         self.0.scroll_metrics()
     }

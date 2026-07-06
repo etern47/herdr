@@ -179,6 +179,7 @@ last_pane = ""
 split_vertical = "prefix+v"
 split_horizontal = "prefix+minus"
 close_pane = "prefix+x"
+clear_pane = ""
 zoom = "prefix+z"
 resize_mode = "prefix+r"
 toggle_sidebar = "prefix+b"
@@ -197,6 +198,8 @@ next_tab = ["prefix+n", "ctrl+alt+]"]
 ```
 
 `last_pane` switches back to the last focused pane across workspaces and tabs. It is unset by default because the tmux-style pane binding `prefix+l` is already used for pane-right focus.
+
+`clear_pane` clears the focused pane like a native terminal Cmd+K: the visible output and the scrollback are erased, and the line you are typing on moves to the top of the pane. Nothing is sent to the shell or the running process, so it works with any prompt and any pending input; full-screen apps on the alternate screen are left untouched. It is unset by default; bind it to a free chord such as `clear_pane = "prefix+shift+c"` (`prefix+shift+k` is already `swap_pane_up`).
 
 `remote_image_paste` is only active in `herdr --remote`. It is the local-client shortcut that sends a local clipboard image to the remote pane. Set it to an empty string to disable the raw-key shortcut; remote terminal paste-image signals still work when the outer terminal sends them.
 
